@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+echo "Building build container";
+docker build --compress -f Dockerfile.build -t build/jetex_server ..;
+ID=$(docker build --compress -q -f Dockerfile.build ..);
+
+echo "Running transient build container; output/ will be persisted.";
+mkdir -p output;
+rm -r output;
+docker run \
+       -v $PWD/output:/jetex_server/output \
+       -v $HOME/.ccache:/ccache \
+       --rm "$ID";
+
+echo "Building service container from output/.";
+if [ -z "$1" ];
+then
+    docker build --compress -f Dockerfile -t jetex_server .;
+else
+    docker build --compress -f Dockerfile -t $1 .;
+fi
+
+docker build --compress -q -f Dockerfile .;

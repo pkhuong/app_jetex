@@ -1,0 +1,21 @@
+1. static data file generator (let's start with a simple 64 -> 64 map)
+2. wrap server library in CFFI (should be a copy/paste of
+   server/include/jetex_server.h)
+3. dummy python server w/o reloading
+4. client library
+5. use DNS-based discovery (only available on the internal soft
+   network) to affine to cores, generate REUSEPORT nonces, schedule
+   reloads, etc. -- we need TCP-based DNS, so use dnspython.
+6. internal benchmark scripts
+7. correctness torture scripts
+
+DONEish:
+
+X reusesocketd w/ TTL on sockets
+X server library can map files in and perform lookups (hopefully -- I never
+  actually ran that code)
+X docker crap; see server/s/build_image for the madness.
+X docker-compose crap:
+  - docker-compose -f docker-compose.yml -f osx.yml up
+  - docker-compose jetex scale jetex=2
+  - docker-compose down

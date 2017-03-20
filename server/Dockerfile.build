@@ -1,0 +1,25 @@
+FROM alpine:3.5
+
+# Try to keep this step as stable as possible to maximise sharing
+RUN apk add --no-cache \
+    bash gawk sed findutils grep \
+    build-base make ccache python3
+
+# Create a fresh build directory; the output subdirectory will
+# go to the host for building.
+WORKDIR /jetex_server
+VOLUME /jetex_server/output
+
+# ccache *in the container* doesn't make sense. Trust cacche's content
+# addressing and share the cache in the host.
+VOLUME /ccache
+
+ENV CCACHE_DIR /ccache/
+
+# Copy everything (that's not ignored) in the build image.
+COPY server/ .
+COPY shared shared
+
+# Running the image will just build the project and write
+# the result to the /jetex_server/output mount.
+CMD ["s/build"]

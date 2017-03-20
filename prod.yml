@@ -1,0 +1,9 @@
+version: '2'
+
+services:
+  reusesocketd:
+    image: eos-registry-v3.adnxs.net/v2/pkhuong/reusesocketd
+    network_mode: "host"
+  jetex:
+    image: eos-registry-v3.adnxs.net/v2/pkhuong/jetex
+    network_mode: "host"

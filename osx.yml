@@ -1,0 +1,13 @@
+version: '2'
+
+services:
+  reusesocketd:
+    network_mode: "bridge"
+    ports:
+     - 10100:10100
+     - 10100:10100/udp
+    volumes:
+     - datavolume:/var/host_run
+    restart: always
+
+  jetex:

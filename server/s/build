@@ -1,0 +1,96 @@
+#!/bin/bash
+set -e
+
+OUT="libjetex_server.so";
+SRC="src shared utility";
+VENDOR="";
+LIBS="-lpthread -lm -ldl";
+CC="${CC:-cc}";
+CCACHE="${CCACHE:-$(if which ccache > /dev/null 2> /dev/null; then echo ccache; fi)}";
+NCPU="${NCPU:-$(grep -c -E '^processor\s+:' /proc/cpuinfo)}";
+SYMBOLS=$(awk '{ if (NR == 1) printf("%s", $1); else printf("|%s", $1)}' < SYMBOLS);
+
+DEFAULT_CFLAGS="-std=gnu99 -O2 -D_GNU_SOURCE -fPIC -ggdb3 -gdwarf-4";
+DEFAULT_CFLAGS+=" -fno-omit-frame-pointer -fno-common -fvisibility=hidden";
+DEFAULT_CFLAGS+=" -fno-strict-aliasing -fwrapv -fexceptions -fstack-protector-all";
+DEFAULT_CFLAGS+=" -msse4.2 -msse4.1 -mpopcnt -maes -mpclmul -mrdrnd -march=core2 -mtune=native";
+
+if [ -z "$RELEASE" ];
+then
+    # base warnings.
+    CHECK_CFLAGS="-Werror -W -Wall -Wextra -Wuninitialized -Wformat=2 -Wundef";
+    # bad prototypes are never acceptable.
+    CHECK_CFLAGS+=" -Wstrict-prototypes -Wold-style-definition -Wmissing-prototypes -Wmissing-declarations";
+    # local "style" errors: unused variables/params, declarations in the middle of blocks,
+    # variables that lexically shadow another, using sizeof(void), string constants as
+    # non-const arrays.
+    CHECK_CFLAGS+=" -Wunused -Wdeclaration-after-statement -Wshadow -Wpointer-arith -Wwrite-strings";
+    # switch safety.
+    CHECK_CFLAGS+=" -Wswitch-enum -Wswitch-default";
+    # object/frame size limits
+    CHECK_CFLAGS+=" -Wlarger-than=$((2 ** 24)) -Wframe-larger-than=30000";
+    # cast errors: unsafe *increase* in alignment, lossy conversion.
+    CHECK_CFLAGS+=" -Wcast-align -Wconversion";
+    # potential traps: hidden padding, old-style varargs, VLA.
+    CHECK_CFLAGS+=" -Wpadded -Wvarargs -Wvla";
+    if [ "x$LOGBRAID_CHECK" = "xgcc" ] || $($CC -v 2>&1 | grep -q 'gcc.* version');
+    then
+	# might as well annotate with what we know.
+	CHECK_CFLAGS+=" -Wsuggest-attribute=pure -Wsuggest-attribute=const";
+	CHECK_CFLAGS+=" -Wsuggest-attribute=noreturn -Wsuggest-attribute=format"
+	# misc bad ideas.
+	CHECK_CFLAGS+=" -Wtrampolines -Wjump-misses-init -Wnormalized=nfkc";
+	# let's try to avoid getting burned by '&' VS '&&'.
+	CHECK_CFLAGS+=" -Wlogical-op";
+    elif [ "x$LOGBRAID_CHECK" = "xclang" ] || $($CC -v 2>&1 | grep -q 'clang.* version');
+    then
+       CHECK_CFLAGS=" -Wformat-pedantic";
+    fi
+fi
+
+CFLAGS="${CFLAGS:-$DEFAULT_CFLAGS}";
+
+if [ -z "$DISABLE_CCACHE" ] && [ ! -z "$CCACHE" ];
+then
+    echo "Enabling ccache ($CCACHE); define DISABLE_CCACHE to override";
+else
+    echo "Disabling ccache.  Consider undefining DISABLE_CCACHE and installing ccache.";
+    CCACHE="";
+fi
+
+echo "Cleaning build/object";
+mkdir -p build
+rm -r build
+mkdir -p build/object
+
+echo "Creating directory structure for build/object";
+find -L $SRC $VENDOR -type d -exec mkdir -p build/object/{} \;;
+
+if [ ! -z "$VENDOR" ];
+then
+    echo "Building vendored dependencies in build/object";
+    time find -L $VENDOR -type f -name '*\.c' -print0 | \
+	sed -e 's/\.c\x00/\x00/g' | \
+	xargs -0 -n 1 -P $NCPU sh -c "echo \"\$0.c\"; $CCACHE $CC $CFLAGS -O3 -fstrict-aliasing $EXTRA_CFLAGS -c \"\$0.c\" -o \"build/object/\$0.o\" || exit 255";
+fi
+
+echo "Building in build/object";
+time find -L $SRC -type f -name '*\.c' -print0 | \
+    sed -e 's/\.c\x00/\x00/g' | \
+    xargs -0 -n 1 -P $NCPU sh -c "echo \"\$0.c\"; $CCACHE $CC $CHECK_CFLAGS $CFLAGS $EXTRA_CFLAGS -isystem vendor/ -Iinclude/ -I. -c \"\$0.c\" -o \"build/object/\$0.o\" || exit 255";
+
+BUILT=$(find build/object/ -type f -iname '*\.o' -print0 | sed -e 's/\s/\\\0/g' -e 's/\x00/ /g');
+COMMAND="$CC $CFLAGS $EXTRA_CFLAGS $LDFLAGS $EXTRA_LDFLAGS $BUILT $LIBS -shared -o output/$OUT";
+
+echo -n "Linking output/$OUT: $COMMAND";
+time (sh -c "$COMMAND" || exit $?);
+echo "Done building output/$OUT";
+
+EXPORTS=$((nm output/$OUT | grep ' [A-TV-Z] ' | egrep -v "^\s*[0-9a-f]+ [A-Z] ($SYMBOLS)\s*$") || true);
+if [ ! -z "$EXPORTS" ];
+then
+    echo;
+    echo -e "\e[1;31mUnexpected exports:\e[0m";
+    echo "$EXPORTS";
+    echo;
+fi

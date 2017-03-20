@@ -1,0 +1,11 @@
+__bss_start
+_edata
+_end
+_fini
+_init
+jetex_namespace_create
+jetex_namespace_destroy
+jetex_serve
+jetex_table_fragment_validate
+jetex_table_create
+jetex_table_destroy
