@@ -7,7 +7,7 @@ services:
      - 10100:10100
      - 10100:10100/udp
     volumes:
-     - datavolume:/var/host_run
+     - shared:/var/shared_run
     restart: always
 
   jetex:
