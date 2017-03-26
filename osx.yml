@@ -6,8 +6,7 @@ services:
     ports:
      - 10100:10100
      - 10100:10100/udp
-    volumes:
-     - shared:/var/shared_run
     restart: always
 
   jetex:
+    image: jetex_server
